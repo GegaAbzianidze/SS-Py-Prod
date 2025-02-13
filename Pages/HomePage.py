@@ -6,24 +6,45 @@ class HomePage(tk.Frame):
         tk.Frame.__init__(self, parent)
         self.controller = controller
         
-        # Title Label
-        label = ttk.Label(self, text="Home Page", font=("Helvetica", 18))
-        label.pack(pady=10, padx=10)
+        # Main title
+        title_label = ttk.Label(self, text="SnapStation", font=("Helvetica", 62, "bold"))
+        title_label.pack(pady=(150, 10))
+        
+        # Subtitle
+        subtitle_label = ttk.Label(self, text="Choose your capture mode", font=("Helvetica", 22))
+        subtitle_label.pack(pady=(0, 40))
 
-        # Navigation buttons
-        button_frame = ttk.Frame(self)
-        button_frame.pack(pady=20)
-
-        capture_button = ttk.Button(
-            button_frame,
-            text="Go to Capture",
-            command=lambda: controller.show_frame("CapturePage")
+        # Create center frame for buttons
+        center_frame = ttk.Frame(self)
+        center_frame.pack(expand=True, pady=(0, 100))
+        
+        # Load button images from Components folder
+        self.take_picture_img = tk.PhotoImage(file="Assets/Components/Picture.png")
+        self.create_gif_img = tk.PhotoImage(file="Assets/Components/Gif.png")
+        self.create_panorama_img = tk.PhotoImage(file="Assets/Components/360.png")
+        
+        # Create image buttons with equal spacing
+        take_picture_btn = tk.Label(
+            center_frame,
+            image=self.take_picture_img,
+            cursor="hand2"
         )
-        capture_button.pack(pady=5)
-
-        admin_button = ttk.Button(
-            button_frame,
-            text="Back to Admin",
-            command=lambda: controller.show_frame("AdminPanel")
+        take_picture_btn.grid(row=0, column=0, padx=20)
+        take_picture_btn.bind("<Button-1>", lambda e: controller.show_frame("CapturePage"))
+        
+        create_gif_btn = tk.Label(
+            center_frame,
+            image=self.create_gif_img,
+            cursor="hand2"
         )
-        admin_button.pack(pady=5) 
+        create_gif_btn.grid(row=0, column=1, padx=20)
+        create_gif_btn.bind("<Button-1>", lambda e: controller.show_frame("CapturePage"))
+
+        create_panorama_btn = tk.Label(
+            center_frame,
+            image=self.create_panorama_img,
+            cursor="hand2"
+        )
+        create_panorama_btn.grid(row=0, column=2, padx=20)
+        create_panorama_btn.bind("<Button-1>", lambda e: controller.show_frame("CapturePage"))
+        

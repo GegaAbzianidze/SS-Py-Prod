@@ -248,6 +248,14 @@ class AdminPanel(ttk.Frame):
         )
         create_btn.pack(fill=X, pady=(20, 0))
 
+        homePage_btn = ttk.Button(
+            create_event_frame,
+            text="Home Page",
+            style='Custom.TButton',
+            command=lambda: self.controller.show_frame("HomePage")
+        )
+        homePage_btn.pack(fill=X, pady=(20, 0))
+
     def event_button_clicked(self):
         if self.storage_combo.get() == "Local Storage":
             self.create_event_local()
