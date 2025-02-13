@@ -5,6 +5,11 @@ from ttkbootstrap.constants import *
 from datetime import datetime
 import logging
 from Utils.WebcamUtils import WebcamUtils  # Changed from WebcamUtils
+from PIL import Image, ImageTk
+import time
+from Utils.CaptureUtils import CaptureUtils
+import cv2
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -258,7 +263,7 @@ class AdminPanel(ttk.Frame):
         # Other test buttons
         other_buttons = [
             ("Test Upload Speed", "⬆", lambda: logger.debug("Upload speed test clicked")),
-            ("Test Image Processing", "🖼", lambda: logger.debug("Image processing test clicked")),
+            ("Test Image Processing", "🖼", self.start_media_tests),
             ("Run Diagnostics", "🔍", lambda: logger.debug("Diagnostics clicked"))
         ]
 
@@ -280,6 +285,238 @@ class AdminPanel(ttk.Frame):
         self.logs_frame = ttk.Frame(parent)
         self.logs_frame.pack(fill=BOTH, expand=YES)
         logger.debug("Test logs tab setup completed")
+
+        # Add media preview frame after the buttons
+        self.media_preview_frame = ttk.Frame(parent, style='Custom.TFrame')
+        self.media_preview_frame.pack(fill=X, pady=(0, 20))
+        self.media_preview_frame.pack_forget()  # Initially hidden
+
+    def start_media_tests(self):
+        """Start the sequence of media tests"""
+        logger.debug("Starting media tests")
+        try:
+            # Ensure webcam is running
+            self.controller.start_webcam()
+            webcam = self.controller.get_webcam()
+            
+            # Create or show media preview frame
+            if not self.media_preview_frame.winfo_ismapped():
+                self.media_preview_frame.pack(before=self.logs_frame, fill=X, pady=(0, 20))
+            
+            # Clear any existing content
+            for widget in self.media_preview_frame.winfo_children():
+                widget.destroy()
+            
+            # Create preview label
+            preview_label = ttk.Label(self.media_preview_frame)
+            preview_label.pack(pady=10)
+            
+            # Capture and display image
+            frame = webcam.get_current_frame()
+            if frame is not None:
+                image = Image.fromarray(frame)
+                photo = ImageTk.PhotoImage(image)
+                preview_label.configure(image=photo)
+                preview_label.image = photo  # Keep a reference
+                
+                # Add GIF test button
+                gif_button = ttk.Button(
+                    self.media_preview_frame,
+                    text="Test GIF Capture",
+                    style='Custom.TButton',
+                    command=lambda: self.capture_gif_test(preview_label)
+                )
+                gif_button.pack(pady=5)
+            
+        except Exception as e:
+            logger.error(f"Error in media tests: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def capture_gif_test(self, preview_label):
+        """Capture and display a test GIF"""
+        logger.debug("Starting GIF capture test")
+        try:
+            # Hide the GIF test button if it exists
+            for widget in self.media_preview_frame.winfo_children():
+                if isinstance(widget, ttk.Button) and widget['text'] == "Test GIF Capture":
+                    widget.pack_forget()
+            
+            webcam = self.controller.get_webcam()
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            filename = f"Assets/test_captures/gif_test_{timestamp}.gif"
+            
+            # Add a progress label
+            progress_label = ttk.Label(
+                self.media_preview_frame,
+                text="Capturing GIF (3 seconds)...",
+                style='Custom.TLabel'
+            )
+            progress_label.pack(pady=5)
+            
+            def capture_and_display():
+                try:
+                    # Capture GIF
+                    if CaptureUtils.capture_gif(webcam, duration=3, filename=filename):
+                        # Remove progress label
+                        progress_label.destroy()
+                        
+                        # Display the captured GIF
+                        gif = Image.open(filename)
+                        gif_frames = []
+                        
+                        # Load all frames
+                        current_frame = 0
+                        while True:
+                            try:
+                                gif.seek(current_frame)
+                                frame = gif.copy()
+                                if frame.size != (640, 360):
+                                    frame = frame.resize((640, 360), Image.Resampling.LANCZOS)
+                                gif_frames.append(ImageTk.PhotoImage(frame))
+                                current_frame += 1
+                            except EOFError:
+                                break
+                        
+                        def update_gif(frame_index=0):
+                            if preview_label.winfo_exists():
+                                preview_label.configure(image=gif_frames[frame_index])
+                                preview_label.image = gif_frames[frame_index]
+                                next_frame = (frame_index + 1) % len(gif_frames)
+                                preview_label.after(100, update_gif, next_frame)
+                        
+                        # Start GIF animation
+                        update_gif()
+                        
+                        # Add video test button
+                        video_button = ttk.Button(
+                            self.media_preview_frame,
+                            text="Test Video Capture",
+                            style='Custom.TButton',
+                            command=lambda: self.capture_video_test(preview_label)
+                        )
+                        video_button.pack(pady=5)
+                
+                except Exception as e:
+                    logger.error(f"Error in GIF capture and display: {str(e)}")
+                    if progress_label.winfo_exists():
+                        progress_label.configure(text="Error capturing GIF")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            
+            # Run the capture process in a separate thread
+            import threading
+            capture_thread = threading.Thread(target=capture_and_display, daemon=True)
+            capture_thread.start()
+            
+        except Exception as e:
+            logger.error(f"Error setting up GIF capture: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def capture_video_test(self, preview_label):
+        """Capture and display a test video"""
+        logger.debug("Starting video capture test")
+        try:
+            # Hide the video test button
+            for widget in self.media_preview_frame.winfo_children():
+                if isinstance(widget, ttk.Button) and widget['text'] == "Test Video Capture":
+                    widget.pack_forget()
+            
+            webcam = self.controller.get_webcam()
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            filename = f"Assets/test_captures/video_test_{timestamp}.mp4"
+            
+            # Add a progress label
+            progress_label = ttk.Label(
+                self.media_preview_frame,
+                text="Capturing Video (7 seconds)...",
+                style='Custom.TLabel'
+            )
+            progress_label.pack(pady=5)
+            
+            def capture_and_display():
+                try:
+                    # Clear previous image/gif from preview label
+                    preview_label.configure(image='')
+                    preview_label.image = None
+                    
+                    # Capture video
+                    if CaptureUtils.capture_video(webcam, filename, duration=7):
+                        progress_label.configure(text="Video captured successfully!")
+                        
+                        # Create video preview using OpenCV
+                        cap = cv2.VideoCapture(filename)
+                        
+                        def update_video_frame():
+                            ret, frame = cap.read()
+                            if ret:
+                                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                                frame = cv2.resize(frame, (640, 360))
+                                image = Image.fromarray(frame)
+                                photo = ImageTk.PhotoImage(image=image)
+                                preview_label.configure(image=photo)
+                                preview_label.image = photo
+                                preview_label.after(33, update_video_frame)
+                            else:
+                                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                                preview_label.after(33, update_video_frame)
+                        
+                        # Start video playback
+                        update_video_frame()
+                        
+                        # Add clear button
+                        clear_button = ttk.Button(
+                            self.media_preview_frame,
+                            text="Clear Tests",
+                            style='Custom.TButton',
+                            command=lambda: [cap.release(), self.clear_media_tests()]
+                        )
+                        clear_button.pack(pady=5)
+                    else:
+                        progress_label.configure(text="Failed to capture video")
+                
+                except Exception as e:
+                    logger.error(f"Error in video capture and display: {str(e)}")
+                    if progress_label.winfo_exists():
+                        progress_label.configure(text="Error capturing video")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            
+            # Run the capture process in a separate thread
+            import threading
+            capture_thread = threading.Thread(target=capture_and_display, daemon=True)
+            capture_thread.start()
+            
+        except Exception as e:
+            logger.error(f"Error setting up video capture: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def clear_media_tests(self):
+        """Clear all media test displays and files"""
+        logger.debug("Clearing media tests")
+        try:
+            # Clear the preview frame
+            self.media_preview_frame.pack_forget()
+            for widget in self.media_preview_frame.winfo_children():
+                widget.destroy()
+            
+            # Delete all files in test_captures directory
+            test_captures_dir = "Assets/test_captures"
+            if os.path.exists(test_captures_dir):
+                for file in os.listdir(test_captures_dir):
+                    file_path = os.path.join(test_captures_dir, file)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.unlink(file_path)
+                    except Exception as e:
+                        logger.error(f"Error deleting file {file_path}: {str(e)}")
+        
+        except Exception as e:
+            logger.error(f"Error clearing media tests: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def setup_webcam_preview(self, parent):
         logger.debug("Setting up webcam preview frame")

@@ -2,6 +2,9 @@ import cv2
 from PIL import Image
 import time
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CaptureUtils:
     @staticmethod
@@ -19,50 +22,83 @@ class CaptureUtils:
         frames = []
         start_time = time.time()
         frame_interval = 1.0 / fps
-
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
+        # Capture frames
         while time.time() - start_time < duration:
             frame = webcam.get_current_frame()
             if frame is not None:
-                frames.append(Image.fromarray(frame))
+                # Convert frame to PIL Image and resize if needed
+                image = Image.fromarray(frame)
+                if image.size != (640, 360):
+                    image = image.resize((640, 360), Image.Resampling.LANCZOS)
+                frames.append(image)
             time.sleep(frame_interval)
-
+        
         if frames:
-            os.makedirs(os.path.dirname(filename), exist_ok=True)
-            frames[0].save(
-                filename,
-                save_all=True,
-                append_images=frames[1:],
-                duration=int(1000 / fps),  # Duration per frame in ms
-                loop=0,
-                optimize=True
-            )
-            return True
+            try:
+                # Save GIF with optimizations
+                frames[0].save(
+                    filename,
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=int(1000 / fps),  # Duration per frame in ms
+                    loop=0,
+                    optimize=False,  # Disable optimization for better quality
+                    quality=95  # Higher quality
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Error saving GIF: {str(e)}")
+                return False
         return False
 
     @staticmethod
     def capture_video(webcam, filename, duration=7, fps=30):
         """Capture a video from the webcam"""
-        frames = []
-        start_time = time.time()
-        frame_interval = 1.0 / fps
-
-        while time.time() - start_time < duration:
-            frame = webcam.get_current_frame()
-            if frame is not None:
-                frames.append(frame)
-            time.sleep(frame_interval)
-
-        if frames:
+        try:
+            # Create directory if it doesn't exist
             os.makedirs(os.path.dirname(filename), exist_ok=True)
-            out = cv2.VideoWriter(
-                filename,
-                cv2.VideoWriter_fourcc(*'mp4v'),
-                fps,
-                frames[0].shape[:2][::-1]
-            )
             
-            for frame in frames:
-                out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-            out.release()
-            return True
-        return False 
+            frames = []
+            start_time = time.time()
+            frame_interval = 1.0 / fps
+            
+            # Capture frames
+            while time.time() - start_time < duration:
+                frame = webcam.get_current_frame()
+                if frame is not None:
+                    # Convert from RGB to BGR for OpenCV
+                    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    frames.append(frame_bgr)
+                time.sleep(frame_interval)
+
+            if frames:
+                # Get dimensions from the first frame
+                height, width = frames[0].shape[:2]
+                
+                # Initialize video writer with proper codec
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(filename, fourcc, fps, (width, height))
+                
+                try:
+                    # Write frames
+                    for frame in frames:
+                        out.write(frame)
+                    return True
+                except Exception as e:
+                    logger.error(f"Error writing video: {str(e)}")
+                    return False
+                finally:
+                    # Always release the video writer
+                    out.release()
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error in video capture: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False 
