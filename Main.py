@@ -13,6 +13,10 @@ class App(ttk.Window):
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
+        # Initialize single webcam instance for the entire application
+        self.webcam = None
+        self.webcam_running = False
+        
         # Set initial window state
         self.is_fullscreen = True
         self.attributes('-fullscreen', True)
@@ -54,6 +58,7 @@ class App(ttk.Window):
 
     def on_closing(self):
         """Handle cleanup when closing the application"""
+        self.stop_webcam()
         self.quit()
         self.destroy()
 
@@ -64,6 +69,26 @@ class App(ttk.Window):
         if not self.is_fullscreen:
             # Set a reasonable window size when not fullscreen
             self.geometry('800x600')
+
+    def get_webcam(self):
+        """Get or create the webcam instance"""
+        if not self.webcam:
+            from Utils.WebcamUtils import WebcamUtils
+            self.webcam = WebcamUtils(preview_size=(640, 360))
+        return self.webcam
+    
+    def start_webcam(self):
+        """Start the webcam if it's not already running"""
+        if not self.webcam_running:
+            self.webcam_running = True
+            self.get_webcam()
+    
+    def stop_webcam(self):
+        """Stop the webcam completely"""
+        if self.webcam:
+            self.webcam.stop_preview()
+            self.webcam = None
+            self.webcam_running = False
 
 if __name__ == "__main__":
     app = App()

@@ -319,33 +319,31 @@ class AdminPanel(ttk.Frame):
 
     def toggle_webcam_preview(self):
         logger.debug("Toggle webcam preview called")
-        if hasattr(self, 'webcam') and self.webcam:
-            logger.debug("Webcam exists, hiding preview")
+        # Check if webcam_frame exists and is not None before checking if it's mapped
+        if hasattr(self, 'webcam_frame') and self.webcam_frame is not None and self.webcam_frame.winfo_ismapped():
+            logger.debug("Webcam frame is visible, hiding preview")
             self.hide_webcam_preview()
         else:
-            logger.debug("No webcam exists, showing preview")
+            logger.debug("Webcam frame is hidden or doesn't exist, showing preview")
             self.show_webcam_preview()
 
     def show_webcam_preview(self):
         logger.debug("Attempting to show webcam preview")
         try:
-            if not hasattr(self, 'webcam') or self.webcam is None:
-                logger.debug("Initializing new webcam instance")
-                from Utils.WebcamUtils import WebcamUtils  # Import here to ensure it's available
-                self.webcam = WebcamUtils(preview_size=(640, 360))
-                logger.debug("Webcam instance created")
+            # Get the application-level webcam instance
+            self.controller.start_webcam()
+            webcam = self.controller.get_webcam()
             
             if not hasattr(self, 'webcam_frame') or self.webcam_frame is None:
                 logger.debug("Setting up webcam frame")
                 self.setup_webcam_preview(self)
-                logger.debug("Webcam frame created")
             
             logger.debug("Packing webcam frame")
             self.webcam_frame.pack(before=self.logs_frame, fill=X, pady=(0, 20))
             
             logger.debug("Starting webcam preview")
-            self.webcam.start_preview(self.preview_label)
-            logger.debug("Webcam preview started successfully")
+            webcam.start_preview(self.preview_label)
+            
         except Exception as e:
             logger.error(f"Error showing webcam preview: {str(e)}")
             import traceback
@@ -354,12 +352,6 @@ class AdminPanel(ttk.Frame):
     def hide_webcam_preview(self):
         logger.debug("Attempting to hide webcam preview")
         try:
-            if self.webcam:
-                logger.debug("Stopping webcam preview")
-                self.webcam.stop_preview()
-                self.webcam = None
-                logger.debug("Webcam stopped and reference cleared")
-            
             if hasattr(self, 'webcam_frame') and self.webcam_frame:
                 logger.debug("Hiding webcam frame")
                 self.webcam_frame.pack_forget()
@@ -371,5 +363,4 @@ class AdminPanel(ttk.Frame):
 
     def __del__(self):
         logger.debug("AdminPanel cleanup")
-        if hasattr(self, 'webcam') and self.webcam:
-            self.webcam.stop_preview() 
+        # Remove the webcam cleanup from here since it's managed at the app level 

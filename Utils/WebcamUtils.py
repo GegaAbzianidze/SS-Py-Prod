@@ -47,12 +47,13 @@ class WebcamUtils:
             try:
                 self.initialize_camera()
                 self.running = True
-                self._preview_thread = threading.Thread(
-                    target=self._update_preview,
-                    args=(label,),
-                    daemon=True
-                )
-                self._preview_thread.start()
+                if not self._preview_thread or not self._preview_thread.is_alive():
+                    self._preview_thread = threading.Thread(
+                        target=self._update_preview,
+                        args=(label,),
+                        daemon=True
+                    )
+                    self._preview_thread.start()
             except Exception as e:
                 self.running = False
                 raise RuntimeError(f"Failed to start preview: {str(e)}")
