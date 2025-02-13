@@ -10,10 +10,21 @@ import time
 from Utils.CaptureUtils import CaptureUtils
 import cv2
 import os
+from Utils.FirebaseUtils import FirebaseUtils
+import shutil
+from typing import Optional
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Add these global variables after the imports and before the AdminPanel class
+class EventConfig:
+    current_event_id: Optional[str] = None
+    current_event_name: Optional[str] = None
+    max_images: Optional[int] = None
+    current_image_count: Optional[int] = 0
+    storage_type: Optional[str] = None
 
 class AdminPanel(ttk.Frame):
     def __init__(self, parent, controller):
@@ -22,6 +33,16 @@ class AdminPanel(ttk.Frame):
         self.controller = controller
         self.webcam = None
         self.webcam_frame = None
+        
+        # Initialize instance variables first
+        self.firebase_utils = FirebaseUtils()
+        self.event_name_entry = None
+        self.date_entry = None
+        self.max_images_entry = None
+        self.password_var = tk.BooleanVar()  # Initialize here
+        self.password_entry = None
+        self.password_input_frame = None  # Initialize here
+        self.storage_combo = None
         
         # Configure style
         style = ttk.Style()
@@ -121,10 +142,11 @@ class AdminPanel(ttk.Frame):
             background='#FAF7F5'
         ).pack(anchor=W, pady=(0, 5))
         
-        ttk.Entry(
+        self.event_name_entry = ttk.Entry(
             left_frame,
             font=("Helvetica", 11)
-        ).pack(fill=X, pady=(0, 15))
+        )
+        self.event_name_entry.pack(fill=X, pady=(0, 15))
 
         ttk.Label(
             left_frame,
@@ -139,14 +161,14 @@ class AdminPanel(ttk.Frame):
         
         # Current date and time
         current_datetime = datetime.now()
-        date_entry = ttk.Entry(
+        self.date_entry = ttk.Entry(
             date_frame,
             font=("Helvetica", 11),
             width=28
         )
-        date_entry.pack(side=LEFT, fill=X, expand=True)
-        date_entry.insert(0, current_datetime.strftime('%Y-%m-%d %H:%M'))
-        date_entry.configure(state='readonly')  # Make it read-only
+        self.date_entry.pack(side=LEFT, fill=X, expand=True)
+        self.date_entry.insert(0, current_datetime.strftime('%Y-%m-%d %H:%M'))
+        self.date_entry.configure(state='readonly')
 
         ttk.Label(
             left_frame,
@@ -155,10 +177,12 @@ class AdminPanel(ttk.Frame):
             background='#FAF7F5'
         ).pack(anchor=W, pady=(0, 5))
         
-        ttk.Entry(
+        self.max_images_entry = ttk.Entry(
             left_frame,
             font=("Helvetica", 11)
-        ).pack(fill=X, pady=(0, 15))
+        )
+        self.max_images_entry.pack(fill=X, pady=(0, 15))
+        self.max_images_entry.insert(0, "50")  # Default value
 
         # Right Column
         right_frame = ttk.Frame(form_frame, style='Custom.TFrame')
@@ -191,19 +215,12 @@ class AdminPanel(ttk.Frame):
         )
         self.password_entry.pack(fill=X)
 
-        def toggle_password():
-            if password_var.get():  # If checkbox is checked
-                self.password_input_frame.pack(fill=X, pady=(5, 0))
-            else:
-                self.password_input_frame.pack_forget()
-                self.password_entry.delete(0, tk.END)  # Clear password when unchecked
-
-        password_var = tk.BooleanVar()
+        self.password_var = tk.BooleanVar()
         password_checkbox = ttk.Checkbutton(
             password_frame, 
             style='Custom.TCheckbutton',
-            variable=password_var,
-            command=toggle_password
+            variable=self.password_var,
+            command=self.toggle_password
         )
         password_checkbox.pack(side=RIGHT)
 
@@ -214,21 +231,28 @@ class AdminPanel(ttk.Frame):
             background='#FAF7F5'
         ).pack(anchor=W, pady=(0, 5))
         
-        storage_combo = ttk.Combobox(
+        self.storage_combo = ttk.Combobox(
             right_frame,
             values=["Local Storage", "Cloud Storage"],
             font=("Helvetica", 11)
         )
-        storage_combo.pack(fill=X, pady=(0, 15))
-        storage_combo.set("Select storage location")
+        self.storage_combo.pack(fill=X, pady=(0, 15))
+        self.storage_combo.set("Cloud Storage")  # Set default to Cloud Storage
 
         # Create Event Button at the bottom
         create_btn = ttk.Button(
             create_event_frame,
             text="Create Event",
-            style='Success.TButton'
+            style='Success.TButton',
+            command=self.event_button_clicked
         )
         create_btn.pack(fill=X, pady=(20, 0))
+
+    def event_button_clicked(self):
+        if self.storage_combo.get() == "Local Storage":
+            self.create_event_local()
+        elif self.storage_combo.get() == "Cloud Storage":
+            self.create_event()
 
     def setup_test_logs_tab(self, parent):
         logger.debug("Setting up test logs tab")
@@ -598,6 +622,203 @@ class AdminPanel(ttk.Frame):
             import traceback
             logger.error(traceback.format_exc())
 
+    def toggle_password(self):
+        """Toggle password entry visibility"""
+        if self.password_var.get():
+            self.password_input_frame.pack(fill=X, pady=(5, 0))
+        else:
+            self.password_input_frame.pack_forget()
+            if self.password_entry:
+                self.password_entry.delete(0, tk.END)
+
+    def create_event(self):
+        """Create a new event and upload starting GIF"""
+        try:
+            # Validate inputs
+            event_name = self.event_name_entry.get().strip()
+            if not event_name:
+                logger.error("Event name is required")
+                return
+
+            max_images = self.max_images_entry.get().strip()
+            try:
+                max_images = int(max_images)
+                if max_images <= 0:
+                    raise ValueError("Max images must be positive")
+            except ValueError as e:
+                logger.error(f"Invalid max images value: {str(e)}")
+                return
+
+            # Generate random 12-character event ID
+            import string
+            import random
+            event_id = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+
+            # Get password if enabled
+            password = self.password_entry.get() if self.password_var.get() else "0"
+            access_level = "Public" if not self.password_var.get() else "Private"
+
+            # Create event data
+            event_data = {
+                "event_id": event_id,
+                "name": event_name,
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+                "password": password,
+                "access_level": access_level,
+                "max_images": max_images,
+                "current_image_count": 0,
+                "Images": {
+                    "0": {}  # Will be updated with StartingGif info
+                }
+            }
+
+            # Upload StartingGif
+            starting_gif_path = "Assets/Components/StartingGif.gif"
+            if not os.path.exists(starting_gif_path):
+                logger.error("StartingGif.gif not found")
+                return
+
+            # Upload to Firebase Storage
+            remote_path = f"events/{event_id}/StartingGif.gif"
+            gif_url = self.firebase_utils.upload_file(starting_gif_path, remote_path)
+
+            if gif_url:
+                # Update event data with GIF info
+                event_data["Images"]["0"] = {
+                    "type": "GIF",
+                    "url": gif_url,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                }
+
+                # Create event in Firebase Realtime Database
+                if self.firebase_utils.create_event(event_id, event_data):
+                    logger.debug(f"Event created successfully with ID: {event_id}")
+                    self.clear_event_form()
+                    self.show_success_message(f"Event created successfully!\nEvent ID: {event_id}")
+
+                    # Set global variables
+                    EventConfig.current_event_id = event_id
+                    EventConfig.current_event_name = event_name
+                    EventConfig.max_images = max_images
+                    EventConfig.current_image_count = 0
+                    EventConfig.storage_type = "Cloud"
+                else:
+                    logger.error("Failed to create event in database")
+            else:
+                logger.error("Failed to upload StartingGif")
+
+        except Exception as e:
+            logger.error(f"Error creating event: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def clear_event_form(self):
+        """Clear all form inputs"""
+        self.event_name_entry.delete(0, tk.END)
+        self.max_images_entry.delete(0, tk.END)
+        self.max_images_entry.insert(0, "50")
+        self.password_var.set(False)
+        self.password_entry.delete(0, tk.END)
+        self.storage_combo.set("Cloud Storage")
+
+    def show_success_message(self, message):
+        """Show a success message to the user"""
+        success_window = tk.Toplevel(self)
+        success_window.title("Success")
+        
+        # Position window in center of screen
+        window_width = 300
+        window_height = 100
+        screen_width = success_window.winfo_screenwidth()
+        screen_height = success_window.winfo_screenheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        success_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        ttk.Label(
+            success_window,
+            text=message,
+            font=("Helvetica", 12),
+            wraplength=250
+        ).pack(pady=20)
+        
+        ttk.Button(
+            success_window,
+            text="OK",
+            command=success_window.destroy
+        ).pack()
+
+        # Auto-close after 3 seconds
+        success_window.after(3000, success_window.destroy)
+
     def __del__(self):
         logger.debug("AdminPanel cleanup")
         # Remove the webcam cleanup from here since it's managed at the app level 
+
+    def create_event_local(self):
+        """Create a new event in local storage"""
+        try:
+            # Validate inputs
+            event_name = self.event_name_entry.get().strip()
+            if not event_name:
+                logger.error("Event name is required")
+                return False
+
+            # Generate random 12-character event ID
+            import string
+            import random
+            event_id = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+
+            event_data = {
+                "event_id": event_id,
+                "name": event_name,
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+                "password": self.password_entry.get() if self.password_var.get() else "0",
+                "access_level": "Public" if not self.password_var.get() else "Private",
+                "max_images": int(self.max_images_entry.get().strip()),
+                "current_image_count": 0
+            }
+
+            # Create event directory using event ID instead of name
+            local_event_dir = f"Assets/events/{event_id}"
+            os.makedirs(local_event_dir, exist_ok=True)
+            
+            # Copy StartingGif to event directory
+            starting_gif_path = "Assets/Components/StartingGif.gif"
+            if os.path.exists(starting_gif_path):
+                local_gif_path = f"{local_event_dir}/StartingGif.gif"
+                shutil.copy2(starting_gif_path, local_gif_path)
+                event_data["Images"] = {
+                    "0": {
+                        "type": "GIF",
+                        "path": local_gif_path,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                    }
+                }
+            else:
+                logger.error("StartingGif.gif not found")
+                return False
+            
+            # Create event_info.json file
+            info_file_path = f"{local_event_dir}/event_info.json"
+            import json
+            with open(info_file_path, 'w') as f:
+                json.dump(event_data, f, indent=4)
+            
+            logger.debug(f"Created local event in: {local_event_dir}")
+            self.clear_event_form()
+            self.show_success_message(f"Event created successfully!\nEvent ID: {event_id}")
+
+            # Set global variables
+            EventConfig.current_event_id = event_id
+            EventConfig.current_event_name = event_name
+            EventConfig.max_images = int(self.max_images_entry.get().strip())
+            EventConfig.current_image_count = 0
+            EventConfig.storage_type = "Local"
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error creating local event: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False

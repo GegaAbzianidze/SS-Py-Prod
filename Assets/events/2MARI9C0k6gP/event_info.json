@@ -1,0 +1,16 @@
+{
+    "event_id": "2MARI9C0k6gP",
+    "name": "54",
+    "created_at": "2025-02-13 18:35:49.869486",
+    "password": "887",
+    "access_level": "Private",
+    "max_images": 509,
+    "current_image_count": 0,
+    "Images": {
+        "0": {
+            "type": "GIF",
+            "path": "Assets/events/2MARI9C0k6gP/StartingGif.gif",
+            "timestamp": "2025-02-13 18:35:49.874288"
+        }
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "event_id": "Ea78eeMXZJTi",
+    "name": "asdf",
+    "created_at": "2025-02-13 18:25:14.957434",
+    "password": "eqs",
+    "access_level": "Public",
+    "max_images": 50,
+    "current_image_count": 0,
+    "Images": {
+        "0": {
+            "type": "GIF",
+            "path": "Assets/events/Ea78eeMXZJTi/StartingGif.gif",
+            "timestamp": "2025-02-13 18:25:14.963287"
+        }
+    }
+}
