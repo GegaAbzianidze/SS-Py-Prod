@@ -29,6 +29,7 @@ class WebcamUtils:
             self.running = False
             self._frame_lock = threading.Lock()
             self._preview_thread = None
+            self.display_mode = "normal"  # Add display mode
 
     def initialize_camera(self):
         """Initialize the camera with proper settings"""
@@ -95,6 +96,19 @@ class WebcamUtils:
     def __del__(self):
         """Ensure resources are properly released"""
         self.stop_preview()
+
+    def set_display_mode(self, mode="normal"):
+        """Set the display mode and adjust preview size accordingly"""
+        self.display_mode = mode
+        if mode == "large":
+            self.preview_size = (1369, 770)  # 16:9 HD resolution (8% larger)
+        else:  # normal
+            self.preview_size = (960, 540)   # 16:9 default size
+        
+        # If preview is running, update the frame size
+        if self.running and self.frame is not None:
+            with self._frame_lock:
+                self.frame = cv2.resize(self.frame, self.preview_size)
 
 class WebcamCapture:
     def __init__(self):

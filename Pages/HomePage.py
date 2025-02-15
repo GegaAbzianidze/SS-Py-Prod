@@ -30,7 +30,7 @@ class HomePage(tk.Frame):
             cursor="hand2"
         )
         take_picture_btn.grid(row=0, column=0, padx=20)
-        take_picture_btn.bind("<Button-1>", lambda e: controller.show_frame("CapturePage"))
+        take_picture_btn.bind("<Button-1>", lambda e: self.switch_to_capture("PIC"))
         
         create_gif_btn = tk.Label(
             center_frame,
@@ -38,7 +38,7 @@ class HomePage(tk.Frame):
             cursor="hand2"
         )
         create_gif_btn.grid(row=0, column=1, padx=20)
-        create_gif_btn.bind("<Button-1>", lambda e: controller.show_frame("CapturePage"))
+        create_gif_btn.bind("<Button-1>", lambda e: self.switch_to_capture("GIF"))
 
         create_panorama_btn = tk.Label(
             center_frame,
@@ -46,5 +46,10 @@ class HomePage(tk.Frame):
             cursor="hand2"
         )
         create_panorama_btn.grid(row=0, column=2, padx=20)
-        create_panorama_btn.bind("<Button-1>", lambda e: controller.show_frame("CapturePage"))
+        create_panorama_btn.bind("<Button-1>", lambda e: self.switch_to_capture("360°"))
+        
+    def switch_to_capture(self, mode):
+        capture_page = self.controller.frames["CapturePage"]
+        capture_page.set_mode(mode)
+        self.controller.show_frame("CapturePage")
         
